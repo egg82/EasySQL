@@ -17,4 +17,9 @@ pipeline {
             }
         }
     }
+	post {
+        always {
+            archiveArtifacts artifacts: 'target/easy-sql-*.jar', fingerprint: true
+        }
+    }
 }
