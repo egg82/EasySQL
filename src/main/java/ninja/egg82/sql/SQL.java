@@ -3,6 +3,8 @@ package ninja.egg82.sql;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import java.util.Properties;
+
+import ninja.egg82.core.NamedParameterCallableStatement;
 import ninja.egg82.core.NamedParameterStatement;
 import ninja.egg82.core.SQLExecuteResult;
 import ninja.egg82.core.SQLQueryResult;
@@ -197,6 +199,58 @@ public class SQL implements AutoCloseable {
         return CompletableFuture.supplyAsync(() -> {
             try {
                 return batchExecute(q, namedParams);
+            } catch (SQLException ex) {
+                throw new CompletionException(ex);
+            }
+        });
+    }
+
+    public SQLQueryResult call(String q, Object... params) throws SQLException {
+        try (Connection connection = source.getConnection(); CallableStatement statement = connection.prepareCall(q)) {
+            if (params != null) {
+                for (int i = 0; i < params.length; i++) {
+                    statement.setObject(i + 1, params[i]);
+                }
+            }
+
+            SQLQueryResult result = query(statement);
+            if (!source.isAutoCommit()) {
+                connection.commit();
+            }
+            return result;
+        }
+    }
+
+    public SQLQueryResult call(String q, Map<String, Object> namedParams) throws SQLException {
+        try (Connection connection = source.getConnection(); NamedParameterCallableStatement statement = new NamedParameterCallableStatement(connection, q)) {
+            if (namedParams != null) {
+                for (Map.Entry<String, Object> kvp : namedParams.entrySet()) {
+                    statement.setObject(kvp.getKey(), kvp.getValue());
+                }
+            }
+
+            SQLQueryResult result = query(statement.getPreparedStatement());
+            if (!source.isAutoCommit()) {
+                connection.commit();
+            }
+            return result;
+        }
+    }
+
+    public CompletableFuture<SQLQueryResult> calAsync(String q, Object... params) {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                return call(q, params);
+            } catch (SQLException ex) {
+                throw new CompletionException(ex);
+            }
+        });
+    }
+
+    public CompletableFuture<SQLQueryResult> callAsync(String q, Map<String, Object> namedParams) {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                return call(q, namedParams);
             } catch (SQLException ex) {
                 throw new CompletionException(ex);
             }
