@@ -33,11 +33,29 @@ public class SQL implements AutoCloseable {
         source.setAutoCommit(true);
     }
 
+    public HikariDataSource getRawSource() { return source; }
+
     public void close() { source.close(); }
 
     public boolean isClosed() { return source.isClosed(); }
 
     public boolean isRunning() { return source.isRunning(); }
+
+    public boolean tableExists(String schemaPattern, String tablePattern) throws SQLException {
+        try (Connection connection = source.getConnection(); ResultSet results = connection.getMetaData().getTables(null, schemaPattern, tablePattern, null)) {
+            return results.next();
+        }
+    }
+
+    public CompletableFuture<Boolean> tableExistsAsync(String schemaPattern, String tablePattern) {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                return tableExists(schemaPattern, tablePattern);
+            } catch (SQLException ex) {
+                throw new CompletionException(ex);
+            }
+        });
+    }
 
     public SQLQueryResult query(String q, Object... params) throws SQLException {
         try (Connection connection = source.getConnection(); PreparedStatement statement = connection.prepareStatement(q)) {
