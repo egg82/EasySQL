@@ -110,7 +110,7 @@ public class SQL implements AutoCloseable {
     }
 
     public SQLExecuteResult execute(String q, Object... params) throws SQLException {
-        try (Connection connection = source.getConnection(); PreparedStatement statement = connection.prepareStatement(q)) {
+        try (Connection connection = source.getConnection(); PreparedStatement statement = connection.prepareStatement(q, Statement.RETURN_GENERATED_KEYS)) {
             if (params != null) {
                 for (int i = 0; i < params.length; i++) {
                     statement.setObject(i + 1, params[i]);
@@ -126,7 +126,7 @@ public class SQL implements AutoCloseable {
     }
 
     public SQLExecuteResult execute(String q, Map<String, Object> namedParams) throws SQLException {
-        try (Connection connection = source.getConnection(); NamedParameterStatement statement = new NamedParameterStatement(connection, q)) {
+        try (Connection connection = source.getConnection(); NamedParameterStatement statement = new NamedParameterStatement(connection, q, Statement.RETURN_GENERATED_KEYS)) {
             if (namedParams != null) {
                 for (Map.Entry<String, Object> kvp : namedParams.entrySet()) {
                     statement.setObject(kvp.getKey(), kvp.getValue());
@@ -162,7 +162,7 @@ public class SQL implements AutoCloseable {
     }
 
     public SQLExecuteResult[] batchExecute(String q, Object[]... params) throws SQLException {
-        try (Connection connection = source.getConnection(); PreparedStatement statement = connection.prepareStatement(q)) {
+        try (Connection connection = source.getConnection(); PreparedStatement statement = connection.prepareStatement(q, Statement.RETURN_GENERATED_KEYS)) {
             if (params != null) {
                 for (Object[] p : params) {
                     if (p != null) {
@@ -183,7 +183,7 @@ public class SQL implements AutoCloseable {
     }
 
     public SQLExecuteResult[] batchExecute(String q, Map<String, Object>... namedParams) throws SQLException {
-        try (Connection connection = source.getConnection(); NamedParameterStatement statement = new NamedParameterStatement(connection, q)) {
+        try (Connection connection = source.getConnection(); NamedParameterStatement statement = new NamedParameterStatement(connection, q, Statement.RETURN_GENERATED_KEYS)) {
             if (namedParams != null) {
                 for (Map<String, Object> p : namedParams) {
                     if (p != null) {
@@ -317,20 +317,56 @@ public class SQL implements AutoCloseable {
     private SQLExecuteResult execute(PreparedStatement statement) throws SQLException {
         boolean hasResults = statement.execute();
 
-        if (hasResults) {
-            return new SQLExecuteResult(-1);
+        List<String> columns = new ArrayList<>();
+        List<Object[]> keys = new ArrayList<>();
+
+        try (ResultSet results = statement.getGeneratedKeys()) {
+            ResultSetMetaData meta = results.getMetaData();
+
+            for (int i = 1; i <= meta.getColumnCount(); i++) {
+                columns.add(meta.getColumnName(i));
+            }
+
+            collectRows(results, keys, columns.size());
         }
 
-        return new SQLExecuteResult(statement.getUpdateCount());
+        try (ResultSet results = statement.getGeneratedKeys()) {
+            collectRows(results, keys, columns.size());
+        }
+
+        if (hasResults) {
+            return new SQLExecuteResult(-1, columns.toArray(new String[0]), keys.isEmpty() ? new Object[0] : keys.get(0));
+        }
+
+        return new SQLExecuteResult(statement.getUpdateCount(), columns.toArray(new String[0]), keys.isEmpty() ? new Object[0] : keys.get(0));
     }
 
     private SQLExecuteResult[] executeBatch(PreparedStatement statement) throws SQLException {
-        int[] results = statement.executeBatch();
+        int[] updates = statement.executeBatch();
         statement.clearBatch();
 
-        SQLExecuteResult[] retVal = new SQLExecuteResult[results.length];
-        for (int i = 0; i < results.length; i++) {
-            retVal[i] = new SQLExecuteResult(results[i]);
+        List<String> columns = new ArrayList<>();
+        List<Object[]> keys = new ArrayList<>();
+
+        try (ResultSet results = statement.getGeneratedKeys()) {
+            ResultSetMetaData meta = results.getMetaData();
+
+            for (int i = 1; i <= meta.getColumnCount(); i++) {
+                columns.add(meta.getColumnName(i));
+            }
+
+            collectRows(results, keys, columns.size());
+        }
+
+        try (ResultSet results = statement.getGeneratedKeys()) {
+            collectRows(results, keys, columns.size());
+        }
+
+        String[] columnsArray = columns.toArray(new String[0]);
+
+        SQLExecuteResult[] retVal = new SQLExecuteResult[updates.length];
+        for (int i = 0; i < updates.length; i++) {
+            retVal[i] = new SQLExecuteResult(updates[i], columnsArray, keys.size() > i ? keys.get(i) : new Object[0]);
         }
 
         return retVal;

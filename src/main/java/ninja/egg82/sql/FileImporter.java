@@ -69,7 +69,7 @@ public class FileImporter {
                     builder.append('\n');
                 }
             } catch (UnsupportedEncodingException ignored) { }
-            readString(builder.toString());
+            sql.execute(builder.toString());
         }
     }
 
@@ -83,13 +83,31 @@ public class FileImporter {
         });
     }
 
-    public void readString(String contents) throws SQLException { sql.execute(contents); }
+    public void readString(String contents, boolean lineByLine) throws IOException, SQLException {
+        if (lineByLine) {
+            synchronized (lineHandlerLock) {
+                String[] lines = contents.replaceAll("\r\n", "\n").split("\n");
+                for (String line : lines) {
+                    readLine(line);
+                }
+                if (lineHandler.length() > 0) {
+                    // Double-check to make sure we didn't catch a few line terminators at the end of the file
+                    String last = lineHandler.toString().trim();
+                    if (last.length() > 0) {
+                        throw new IOException("Missing deliminator at end of string (" + delimiter + ") at '" + lineHandler.toString() + "'.");
+                    }
+                }
+            }
+        } else {
+            sql.execute(contents);
+        }
+    }
 
-    public CompletableFuture<Void> readStringAsync(String contents) {
+    public CompletableFuture<Void> readStringAsync(String contents, boolean lineByLine) {
         return CompletableFuture.runAsync(() -> {
             try {
-                readString(contents);
-            } catch (SQLException ex) {
+                readString(contents, lineByLine);
+            } catch (SQLException | IOException ex) {
                 throw new CompletionException(ex);
             }
         });

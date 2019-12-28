@@ -1,8 +1,8 @@
 package ninja.egg82.core;
 
 public class SQLQueryResult {
-    private String[] columns;
-    private Object[][] data;
+    private final String[] columns;
+    private final Object[][] data;
 
     public SQLQueryResult() {
         this.columns = null;
