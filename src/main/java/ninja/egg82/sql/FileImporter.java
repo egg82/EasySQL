@@ -127,11 +127,10 @@ public class FileImporter {
                 delimiter = matcher.group(4);
             } else if (line.contains(delimiter)) {
                 lineHandler.append(line, 0, line.lastIndexOf(delimiter));
-                lineHandler.append('\n');
                 sql.execute(lineHandler.toString());
                 lineHandler.setLength(0);
-                if (line.lastIndexOf(delimiter) < line.length() - 1) {
-                    lineHandler.append(line.substring(line.lastIndexOf(delimiter)));
+                if (line.lastIndexOf(delimiter) + delimiter.length() < line.length() - 1) {
+                    lineHandler.append(line.substring(line.lastIndexOf(delimiter) + delimiter.length()));
                     lineHandler.append('\n');
                 }
             } else {
