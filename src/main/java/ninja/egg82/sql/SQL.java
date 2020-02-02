@@ -41,16 +41,32 @@ public class SQL implements AutoCloseable {
 
     public boolean isRunning() { return source.isRunning(); }
 
-    public boolean tableExists(String schemaPattern, String tablePattern) throws SQLException {
-        try (Connection connection = source.getConnection(); ResultSet results = connection.getMetaData().getTables(null, schemaPattern, tablePattern, null)) {
-            return results.next();
+    public boolean tableExists(String schema, String table) throws SQLException {
+        try (Connection connection = source.getConnection(); ResultSet results = connection.getMetaData().getTables(null, schema, table, new String[] { "TABLE" })) {
+            while (results.next()) {
+                String schemaResult = results.getString(1);
+                String tableResult = results.getString(3);
+                if (
+                        (
+                                (schema == null && schemaResult == null)
+                                || (schema != null && schema.equalsIgnoreCase(schemaResult))
+                        )
+                        && (
+                                (table == null && tableResult == null)
+                                || (table != null && table.equalsIgnoreCase(tableResult))
+                        )
+                ) {
+                    return true;
+                }
+            }
+            return false;
         }
     }
 
-    public CompletableFuture<Boolean> tableExistsAsync(String schemaPattern, String tablePattern) {
+    public CompletableFuture<Boolean> tableExistsAsync(String schema, String table) {
         return CompletableFuture.supplyAsync(() -> {
             try {
-                return tableExists(schemaPattern, tablePattern);
+                return tableExists(schema, table);
             } catch (SQLException ex) {
                 throw new CompletionException(ex);
             }
